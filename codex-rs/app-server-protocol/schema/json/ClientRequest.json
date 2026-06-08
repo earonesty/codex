@@ -3285,6 +3285,9 @@
             }
           ]
         },
+        "suppressIdleContinuation": {
+          "type": "boolean"
+        },
         "threadId": {
           "type": "string"
         },

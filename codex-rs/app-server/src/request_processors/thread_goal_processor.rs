@@ -143,7 +143,9 @@ impl ThreadGoalRequestProcessor {
             .await;
         self.emit_thread_goal_updated_ordered(thread_id, goal, listener_command_tx)
             .await;
-        outcome.apply_runtime_effects(&self.goal_service).await;
+        if !params.suppress_idle_continuation {
+            outcome.apply_runtime_effects(&self.goal_service).await;
+        }
         Ok(())
     }
 

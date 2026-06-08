@@ -1883,6 +1883,7 @@ mod tests {
                 objective: Some("ship it".to_string()),
                 status: None,
                 token_budget: None,
+                suppress_idle_continuation: false,
             },
         };
         assert_eq!(
@@ -3188,6 +3189,7 @@ mod tests {
                 objective: Some("ship goal mode".to_string()),
                 status: Some(v2::ThreadGoalStatus::Active),
                 token_budget: Some(Some(10_000)),
+                suppress_idle_continuation: false,
             },
         };
         let get_request = ClientRequest::ThreadGoalGet {

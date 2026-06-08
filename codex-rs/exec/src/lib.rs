@@ -19,6 +19,8 @@ use codex_app_server_client::ExecServerRuntimePaths;
 use codex_app_server_client::InProcessAppServerClient;
 use codex_app_server_client::InProcessClientStartArgs;
 use codex_app_server_client::InProcessServerEvent;
+use codex_app_server_protocol::AdditionalContextEntry;
+use codex_app_server_protocol::AdditionalContextKind;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ConfigWarningNotification;
 use codex_app_server_protocol::JSONRPCErrorError;
@@ -31,6 +33,9 @@ use codex_app_server_protocol::ReviewTarget as ApiReviewTarget;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ServerRequest;
 use codex_app_server_protocol::Thread as AppServerThread;
+use codex_app_server_protocol::ThreadGoalSetParams;
+use codex_app_server_protocol::ThreadGoalSetResponse;
+use codex_app_server_protocol::ThreadGoalStatus;
 use codex_app_server_protocol::ThreadItem as AppServerThreadItem;
 use codex_app_server_protocol::ThreadListParams;
 use codex_app_server_protocol::ThreadListResponse;
@@ -136,6 +141,7 @@ pub use exec_events::TurnStartedEvent;
 pub use exec_events::Usage;
 pub use exec_events::WebSearchItem;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::future::Future;
 use std::io::IsTerminal;
 use std::io::Read;
@@ -210,6 +216,7 @@ struct ExecRunArgs {
     model_provider: Option<String>,
     oss: bool,
     output_schema_path: Option<PathBuf>,
+    goal: Option<String>,
     prompt: Option<String>,
     skip_git_repo_check: bool,
     stderr_with_ansi: bool,
@@ -253,6 +260,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         removed_full_auto,
         color,
         last_message_file,
+        goal,
         json: json_mode,
         prompt,
         output_schema: output_schema_path,
@@ -565,6 +573,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         model_provider,
         oss,
         output_schema_path,
+        goal,
         prompt,
         skip_git_repo_check,
         stderr_with_ansi,
@@ -662,10 +671,20 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
         model_provider,
         oss,
         output_schema_path,
+        goal,
         prompt,
         skip_git_repo_check,
         stderr_with_ansi,
     } = args;
+
+    if goal.is_some() && command.is_some() {
+        anyhow::bail!("--goal can only be used when starting a new exec thread");
+    }
+    if goal.is_some() && config.ephemeral {
+        anyhow::bail!(
+            "--goal cannot be used with --ephemeral because goals require persisted thread state"
+        );
+    }
 
     let mut event_processor: Box<dyn EventProcessor> = match json_mode {
         true => Box::new(EventProcessorWithJsonOutput::new(last_message_file.clone())),
@@ -835,6 +854,25 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
 
     exec_span.record("thread.id", primary_thread_id_for_span.as_str());
 
+    if let Some(goal) = goal.as_ref() {
+        let _: ThreadGoalSetResponse = send_request_with_response(
+            &client,
+            ClientRequest::ThreadGoalSet {
+                request_id: request_ids.next(),
+                params: ThreadGoalSetParams {
+                    thread_id: primary_thread_id_for_span.clone(),
+                    objective: Some(goal.clone()),
+                    status: Some(ThreadGoalStatus::Active),
+                    token_budget: None,
+                    suppress_idle_continuation: true,
+                },
+            },
+            "thread/goal/set",
+        )
+        .await
+        .map_err(anyhow::Error::msg)?;
+    }
+
     // Print the effective configuration and initial request so users can see what Codex
     // is using.
     event_processor.print_config_summary(&config, &prompt_summary, &session_configured);
@@ -869,7 +907,15 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
                         client_user_message_id: None,
                         input: items.into_iter().map(Into::into).collect(),
                         responsesapi_client_metadata: None,
-                        additional_context: None,
+                        additional_context: goal.as_ref().map(|goal| {
+                            HashMap::from([(
+                                "goal".to_string(),
+                                AdditionalContextEntry {
+                                    value: format!("Active thread goal:\n{goal}"),
+                                    kind: AdditionalContextKind::Untrusted,
+                                },
+                            )])
+                        }),
                         environments: None,
                         cwd: Some(default_cwd),
                         runtime_workspace_roots: None,

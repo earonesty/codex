@@ -78,6 +78,10 @@ pub struct Cli {
     )]
     pub last_message_file: Option<PathBuf>,
 
+    /// Create an active thread goal before sending the initial prompt.
+    #[arg(long = "goal", value_name = "OBJECTIVE")]
+    pub goal: Option<String>,
+
     /// Initial instructions for the agent. If not provided as an argument (or
     /// if `-` is used), instructions are read from stdin. If stdin is piped and
     /// a prompt is also provided, stdin is appended as a `<stdin>` block.

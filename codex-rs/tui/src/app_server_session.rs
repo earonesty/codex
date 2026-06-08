@@ -863,6 +863,7 @@ impl AppServerSession {
                     objective,
                     status,
                     token_budget,
+                    suppress_idle_continuation: false,
                 },
             })
             .await

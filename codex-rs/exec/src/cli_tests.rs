@@ -75,6 +75,19 @@ fn parses_config_isolation_flags() {
 }
 
 #[test]
+fn parses_goal_for_root_exec() {
+    let cli = Cli::parse_from([
+        "codex-exec",
+        "--goal",
+        "ship the feature",
+        "start implementing",
+    ]);
+
+    assert_eq!(cli.goal.as_deref(), Some("ship the feature"));
+    assert_eq!(cli.prompt.as_deref(), Some("start implementing"));
+}
+
+#[test]
 fn removed_full_auto_flag_reports_migration_path() {
     let cli = Cli::parse_from(["codex-exec", "--full-auto", "summarize"]);
 
