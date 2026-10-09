@@ -1011,6 +1011,8 @@ pub struct ExternalConfigMigrationPrompts {
 pub struct Notice {
     /// Tracks whether the user has acknowledged the AWS GovCloud guidance.
     pub hide_gov_cloud_guidance: Option<bool>,
+    /// Tracks whether the user opted out of the account security setup reminder.
+    pub hide_security_setup_reminder: Option<bool>,
     /// Tracks whether the user has acknowledged the full access warning prompt.
     pub hide_full_access_warning: Option<bool>,
     /// Tracks whether the user has acknowledged the Windows world-writable directories warning.
