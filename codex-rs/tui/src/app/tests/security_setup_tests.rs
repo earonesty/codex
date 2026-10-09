@@ -15,6 +15,25 @@ use serde_json::json;
 use tokio::net::TcpListener;
 
 #[tokio::test]
+async fn security_setup_skips_fetch_when_reminder_is_hidden() -> Result<()> {
+    let (mut app, _events, _ops) = make_test_app_with_channels().await;
+    app.config.notices.hide_security_setup_reminder = Some(true);
+    let server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+    let (tx, mut events) = mpsc::unbounded_channel();
+
+    crate::security_setup::prefetch(
+        &app.config,
+        &server,
+        AppEventSender::new(tx),
+        app.chat_widget.security_setup_request_id,
+    );
+
+    assert!(events.recv().await.is_none());
+    server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn security_setup_fetch_with_default_features_uses_authenticated_codex_endpoint() -> Result<()>
 {
     let (mut app, mut events, _ops) = make_test_app_with_channels().await;
