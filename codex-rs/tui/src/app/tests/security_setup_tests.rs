@@ -17,8 +17,29 @@ use tokio::net::TcpListener;
 #[tokio::test]
 async fn security_setup_skips_fetch_when_reminder_is_hidden() -> Result<()> {
     let (mut app, _events, _ops) = make_test_app_with_channels().await;
+    let backend = wiremock::MockServer::start().await;
+    app.config.chatgpt_base_url = backend.uri();
+    app.config.cli_auth_credentials_store_mode = AuthCredentialsStoreMode::File;
     app.config.notices.hide_security_setup_reminder = Some(true);
+    std::fs::write(
+        app.config.codex_home.join("config.toml"),
+        format!("chatgpt_base_url = {:?}\n", backend.uri()),
+    )?;
+    write_chatgpt_auth(
+        &app.config.codex_home,
+        ChatGptAuthFixture::new("test-token")
+            .account_id("account")
+            .chatgpt_user_id("user"),
+        AuthCredentialsStoreMode::File,
+    )
+    .expect("write synthetic auth");
+    app_test_support::mount_workspace_routing(&backend).await;
     let server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+    wiremock::Mock::given(wiremock::matchers::path("/wham/security-setup"))
+        .respond_with(wiremock::ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&backend)
+        .await;
     let (tx, mut events) = mpsc::unbounded_channel();
 
     crate::security_setup::prefetch(
@@ -29,6 +50,7 @@ async fn security_setup_skips_fetch_when_reminder_is_hidden() -> Result<()> {
     );
 
     assert!(events.recv().await.is_none());
+    backend.verify().await;
     server.shutdown().await?;
     Ok(())
 }
